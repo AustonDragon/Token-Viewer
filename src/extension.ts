@@ -9,6 +9,8 @@ import * as vscode from 'vscode';
 const XIAOMI_CONFIG = {
     apiUrl: 'https://platform.xiaomimimo.com/api/v1/tokenPlan/usage',
     jsonPath: 'data.usage.items[0].limit - data.usage.items[0].used',
+    totalPath: 'data.usage.items[0].limit',
+    usedPath: 'data.usage.items[0].used',
     loginUrl: 'https://platform.xiaomimimo.com/console/plan-manage',
     headerKey: 'Cookie',
 };
@@ -186,7 +188,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             return;
         }
 
-        // 提取 Token 数量
+        // 提取 Token 数量（剩余量）
         const tokenCount = resolveJsonPath(jsonData, XIAOMI_CONFIG.jsonPath);
 
         if (tokenCount === undefined || tokenCount === null) {
@@ -206,6 +208,25 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             return;
         }
 
+        // 提取总量和已用量，计算百分比
+        let percentage: number | undefined;
+        let totalTokens: number | undefined;
+        const totalVal = resolveJsonPath(jsonData, XIAOMI_CONFIG.totalPath);
+        const usedVal = resolveJsonPath(jsonData, XIAOMI_CONFIG.usedPath);
+        if (totalVal !== undefined && totalVal !== null) {
+            totalTokens = Number(totalVal);
+            if (!isNaN(totalTokens) && totalTokens > 0) {
+                if (usedVal !== undefined && usedVal !== null) {
+                    const usedNum = Number(usedVal);
+                    if (!isNaN(usedNum)) {
+                        percentage = ((totalTokens - usedNum) / totalTokens) * 100;
+                    }
+                } else {
+                    percentage = (tokenNum / totalTokens) * 100;
+                }
+            }
+        }
+
         // ✅ 成功
         cookieErrorCount = 0;
         lastTokenCount = tokenNum;
@@ -213,9 +234,18 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
 
         // 格式化显示（加千分位）
         const formatted = tokenNum.toLocaleString('zh-CN');
-        statusBarItem.text = `$(robot) Token: ${formatted}`;
+        const percentStr = percentage !== undefined ? ` (${percentage.toFixed(1)}%)` : '';
+        statusBarItem.text = `$(robot) Token: ${formatted}${percentStr}`;
         const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-        statusBarItem.tooltip = `Token Viewer - 小米 MiMo\n当前剩余: ${formatted}\n最后更新: ${now}\n点击刷新`;
+        let tooltipText = `Token Viewer - 小米 MiMo\n当前剩余: ${formatted}`;
+        if (percentage !== undefined) {
+            tooltipText += `\n使用百分比: ${percentage.toFixed(1)}%`;
+        }
+        if (totalTokens !== undefined) {
+            tooltipText += `\n总量: ${totalTokens.toLocaleString('zh-CN')}`;
+        }
+        tooltipText += `\n最后更新: ${now}\n点击刷新`;
+        statusBarItem.tooltip = tooltipText;
 
         // 告警
         if (tokenNum <= config.alertThreshold) {
@@ -223,7 +253,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             if (!alertShown) {
                 alertShown = true;
                 vscode.window.showWarningMessage(
-                    `⚠️ Token 不足！当前剩余: ${formatted}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
+                    `⚠️ Token 不足！当前剩余: ${formatted}${percentStr}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
                 );
             }
         } else {
@@ -231,7 +261,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             alertShown = false;
         }
 
-        outputChannel.appendLine(`[Token Viewer] ✅ Token 数量: ${formatted}`);
+        outputChannel.appendLine(`[Token Viewer] ✅ Token 数量: ${formatted}${percentStr}`);
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
