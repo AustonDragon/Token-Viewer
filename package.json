@@ -2,7 +2,7 @@
   "name": "token-viewer",
   "displayName": "Token Viewer",
   "description": "在 VSCode 状态栏实时显示小米 MiMo 平台的剩余 Token 数量",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "bynlk",
   "repository": {
     "type": "git",
@@ -39,7 +39,7 @@
         },
         "tokenViewer.refreshInterval": {
           "type": "number",
-          "default": 300,
+          "default": 10,
           "minimum": 10,
           "description": "自动刷新间隔（秒），最小值为 10 秒"
         },
