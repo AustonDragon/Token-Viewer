@@ -23,6 +23,8 @@ let lastTokenCount: number | undefined;
 let alertShown: boolean = false;
 let cookieErrorCount: number = 0;
 let isRefreshingCookie: boolean = false;
+let lastNotifyTime: number | undefined;
+let lastNotifyToken: number | undefined;
 
 // ============================================================
 // 激活函数 - 插件入口
@@ -69,6 +71,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // 恢复上次的 Token 数量
     lastTokenCount = context.globalState.get<number>('tokenViewer.lastTokenCount');
+    lastNotifyTime = context.globalState.get<number>('tokenViewer.lastNotifyTime');
+    lastNotifyToken = context.globalState.get<number>('tokenViewer.lastNotifyToken');
 
     // 首次刷新
     fetchTokenCount(context);
@@ -128,7 +132,7 @@ function getConfig() {
     const config = vscode.workspace.getConfiguration('tokenViewer');
     return {
         headers: config.get<Record<string, string>>('headers', {}),
-        refreshInterval: config.get<number>('refreshInterval', 300),
+        refreshInterval: config.get<number>('refreshInterval', 10),
         alertThreshold: config.get<number>('alertThreshold', 10000000),
     };
 }
@@ -232,17 +236,42 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
         lastTokenCount = tokenNum;
         context.globalState.update('tokenViewer.lastTokenCount', tokenNum);
 
-        // 格式化显示（加千分位）
-        const formatted = tokenNum.toLocaleString('zh-CN');
+        // 半小时用量提醒
+        const nowMs = Date.now();
+        const NOTIFY_INTERVAL = 30 * 60 * 1000;
+        if (lastNotifyTime !== undefined && lastNotifyToken !== undefined && (nowMs - lastNotifyTime) >= NOTIFY_INTERVAL) {
+            const usedAmount = lastNotifyToken - tokenNum;
+            if (usedAmount > 0) {
+                const elapsed = Math.round((nowMs - lastNotifyTime) / 60000);
+                const usedCompact = formatCompact(usedAmount);
+                const currentCompact = formatCompact(tokenNum);
+                vscode.window.showInformationMessage(
+                    `🤖 Token${elapsed} 分钟用量报告\n 📉消耗: ${usedCompact}\n 💰剩余: ${currentCompact}`
+                );
+            }
+            lastNotifyTime = nowMs;
+            lastNotifyToken = tokenNum;
+            context.globalState.update('tokenViewer.lastNotifyTime', nowMs);
+            context.globalState.update('tokenViewer.lastNotifyToken', tokenNum);
+        } else if (lastNotifyTime === undefined) {
+            lastNotifyTime = nowMs;
+            lastNotifyToken = tokenNum;
+            context.globalState.update('tokenViewer.lastNotifyTime', nowMs);
+            context.globalState.update('tokenViewer.lastNotifyToken', tokenNum);
+        }
+
+        // 格式化显示（缩写）
+        const compact = formatCompact(tokenNum);
+        const fullFormatted = tokenNum.toLocaleString('zh-CN');
         const percentStr = percentage !== undefined ? ` (${percentage.toFixed(1)}%)` : '';
-        statusBarItem.text = `$(robot) Token: ${formatted}${percentStr}`;
+        statusBarItem.text = `$(robot) ${compact}${percentStr}`;
         const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-        let tooltipText = `Token Viewer - 小米 MiMo\n当前剩余: ${formatted}`;
+        let tooltipText = `Token Viewer - 小米 MiMo\n当前剩余: ${fullFormatted}（${compact}）`;
         if (percentage !== undefined) {
-            tooltipText += `\n使用百分比: ${percentage.toFixed(1)}%`;
+            tooltipText += `\n剩余百分比: ${percentage.toFixed(1)}%`;
         }
         if (totalTokens !== undefined) {
-            tooltipText += `\n总量: ${totalTokens.toLocaleString('zh-CN')}`;
+            tooltipText += `\n总量: ${totalTokens.toLocaleString('zh-CN')}（${formatCompact(totalTokens)}）`;
         }
         tooltipText += `\n最后更新: ${now}\n点击刷新`;
         statusBarItem.tooltip = tooltipText;
@@ -253,7 +282,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             if (!alertShown) {
                 alertShown = true;
                 vscode.window.showWarningMessage(
-                    `⚠️ Token 不足！当前剩余: ${formatted}${percentStr}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
+                    `⚠️ Token 不足！当前剩余: ${fullFormatted}${percentStr}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
                 );
             }
         } else {
@@ -261,7 +290,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             alertShown = false;
         }
 
-        outputChannel.appendLine(`[Token Viewer] ✅ Token 数量: ${formatted}${percentStr}`);
+        outputChannel.appendLine(`[Token Viewer] ✅ Token 数量: ${fullFormatted}${percentStr}`);
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -366,8 +395,9 @@ async function triggerCookieRefresh(context: vscode.ExtensionContext): Promise<v
 // ============================================================
 function handleFetchError(message: string, detail?: string): void {
     if (lastTokenCount !== undefined) {
+        const compact = formatCompact(lastTokenCount);
         const formatted = lastTokenCount.toLocaleString('zh-CN');
-        statusBarItem.text = `$(warning) Token: ${formatted} ⚠`;
+        statusBarItem.text = `$(warning) ${compact} ⚠`;
         statusBarItem.tooltip = `Token Viewer - 请求失败\n${message}\n保留上次的值: ${formatted}`;
     } else {
         statusBarItem.text = '$(error) Token: Error';
@@ -379,6 +409,18 @@ function handleFetchError(message: string, detail?: string): void {
         outputChannel.appendLine(`[Token Viewer] 详情: ${detail}`);
     }
     outputChannel.appendLine('');
+}
+
+// ============================================================
+// 数字缩写格式化
+// ============================================================
+function formatCompact(num: number): string {
+    const abs = Math.abs(num);
+    if (abs >= 1e12) { return (num / 1e12).toFixed(1).replace(/\.0$/, '') + 'T'; }
+    if (abs >= 1e9) { return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B'; }
+    if (abs >= 1e6) { return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'; }
+    if (abs >= 1e4) { return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'; }
+    return num.toLocaleString('zh-CN');
 }
 
 // ============================================================
