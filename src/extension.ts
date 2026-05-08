@@ -246,7 +246,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
                 const usedCompact = formatCompact(usedAmount);
                 const currentCompact = formatCompact(tokenNum);
                 vscode.window.showInformationMessage(
-                    `🤖 Token${elapsed} 分钟用量报告\n 📉消耗: ${usedCompact}\n 💰剩余: ${currentCompact}`
+                    `🤖 Token ${elapsed}分钟用量报告\n 📉消耗: ${usedCompact}\n 💰剩余: ${currentCompact}`
                 );
             }
             lastNotifyTime = nowMs;
@@ -260,11 +260,11 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             context.globalState.update('tokenViewer.lastNotifyToken', tokenNum);
         }
 
-        // 格式化显示（缩写）
+        // 格式化显示
         const compact = formatCompact(tokenNum);
         const fullFormatted = tokenNum.toLocaleString('zh-CN');
         const percentStr = percentage !== undefined ? ` (${percentage.toFixed(1)}%)` : '';
-        statusBarItem.text = `$(robot) ${compact}${percentStr}`;
+        statusBarItem.text = `$(robot) ${fullFormatted}${percentStr}`;
         const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
         let tooltipText = `Token Viewer - 小米 MiMo\n当前剩余: ${fullFormatted}（${compact}）`;
         if (percentage !== undefined) {
@@ -395,7 +395,7 @@ async function triggerCookieRefresh(context: vscode.ExtensionContext): Promise<v
 // ============================================================
 function handleFetchError(message: string, detail?: string): void {
     if (lastTokenCount !== undefined) {
-        const compact = formatCompact(lastTokenCount);
+        const compact = lastTokenCount.toLocaleString('zh-CN');
         const formatted = lastTokenCount.toLocaleString('zh-CN');
         statusBarItem.text = `$(warning) ${compact} ⚠`;
         statusBarItem.tooltip = `Token Viewer - 请求失败\n${message}\n保留上次的值: ${formatted}`;
