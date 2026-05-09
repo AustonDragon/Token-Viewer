@@ -1,24 +1,20 @@
 import * as vscode from 'vscode';
-import { PlatformConfig } from '../types';
-import { getConfig, formatCompact } from '../config/settings';
+import { getConfig, formatCompact, resolvePlatformConfig } from '../config/settings';
 import { resolveJsonPath } from '../utils/jsonPath';
 import { httpGet } from '../utils/http';
 import { isAuthError, triggerCookieRefresh } from './cookieService';
 import { handleUsageNotification, checkAlertThreshold } from './alertService';
+import { getXiaomiPlanConfig } from '../platforms/xiaomi';
 
 let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
 let refreshTimer: NodeJS.Timeout | undefined;
 let lastTokenCount: number | undefined;
 let cookieErrorCount: number = 0;
-let platformConfig: PlatformConfig;
 
 export function initTokenService(
-    ctx: vscode.ExtensionContext,
-    config: PlatformConfig
+    ctx: vscode.ExtensionContext
 ): { statusBarItem: vscode.StatusBarItem; outputChannel: vscode.OutputChannel } {
-    platformConfig = config;
-
     outputChannel = vscode.window.createOutputChannel('Token Viewer');
     outputChannel.appendLine('[Token Viewer] 插件已激活（小米 MiMo Token 监控）');
 
@@ -43,6 +39,17 @@ export function setupTimer(ctx: vscode.ExtensionContext): void {
     }
 
     const config = getConfig();
+    const platformConfig = resolvePlatformConfig(config.xiaomiPlanType);
+    if (!platformConfig) {
+        const plan = getXiaomiPlanConfig(config.xiaomiPlanType);
+        if (plan?.disabled) {
+            statusBarItem.text = '$(info) Balance 即将支持';
+            statusBarItem.tooltip = 'Token Viewer - 该计费模式即将支持';
+        }
+        outputChannel.appendLine(`[Token Viewer] 当前计费模式不可用，定时器未启动`);
+        return;
+    }
+
     const intervalMs = config.refreshInterval * 1000;
 
     if (intervalMs > 0) {
@@ -62,6 +69,16 @@ export function clearTimer(): void {
 
 export async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> {
     const config = getConfig();
+    const platformConfig = resolvePlatformConfig(config.xiaomiPlanType);
+
+    if (!platformConfig) {
+        const plan = getXiaomiPlanConfig(config.xiaomiPlanType);
+        if (plan?.disabled) {
+            statusBarItem.text = '$(info) Balance 即将支持';
+            statusBarItem.tooltip = 'Token Viewer - 该计费模式即将支持';
+        }
+        return;
+    }
 
     if (!config.headers[platformConfig.headerKey]) {
         statusBarItem.text = '$(warning) Token: 未配置';

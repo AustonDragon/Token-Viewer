@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { XIAOMI_CONFIG } from './api/xiaomi';
 import { initAlertState } from './services/alertService';
 import { configureCookie } from './services/cookieService';
 import { initTokenService, setupTimer, clearTimer, fetchTokenCount } from './services/tokenService';
 import { openSettingsPanel } from './views/settingsPanel';
+import { resolvePlatformConfig, getConfig } from './config/settings';
 
 export function activate(context: vscode.ExtensionContext): void {
-    const { statusBarItem, outputChannel } = initTokenService(context, XIAOMI_CONFIG);
+    const { statusBarItem, outputChannel } = initTokenService(context);
 
     initAlertState(context);
 
@@ -20,7 +20,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const configureCommand = vscode.commands.registerCommand(
         'tokenViewer.configure',
-        () => configureCookie(context, XIAOMI_CONFIG, fetchTokenCount)
+        () => {
+            const config = getConfig();
+            const platformConfig = resolvePlatformConfig(config.xiaomiPlanType);
+            if (platformConfig) {
+                configureCookie(context, platformConfig, fetchTokenCount);
+            } else {
+                vscode.window.showWarningMessage('当前计费模式暂不支持，请切换到 Token Plan (CN) 或 (SG)');
+            }
+        }
     );
 
     const openSettingsCommand = vscode.commands.registerCommand(
@@ -41,7 +49,16 @@ export function activate(context: vscode.ExtensionContext): void {
             switch (picked.action) {
                 case 'refresh': vscode.commands.executeCommand('tokenViewer.refresh'); break;
                 case 'settings': openSettingsPanel(context); break;
-                case 'cookie': configureCookie(context, XIAOMI_CONFIG, fetchTokenCount); break;
+                case 'cookie': {
+                    const cfg = getConfig();
+                    const pc = resolvePlatformConfig(cfg.xiaomiPlanType);
+                    if (pc) {
+                        configureCookie(context, pc, fetchTokenCount);
+                    } else {
+                        vscode.window.showWarningMessage('当前计费模式暂不支持，请切换到 Token Plan (CN) 或 (SG)');
+                    }
+                    break;
+                }
             }
         }
     );

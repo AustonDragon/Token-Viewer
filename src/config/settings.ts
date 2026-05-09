@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { TokenViewerSettings } from '../types';
+import { XiaomiPlanType, TokenViewerSettings, PlatformConfig } from '../types';
+import { getXiaomiPlanConfig, XIAOMI_LOGIN_URL, XIAOMI_HEADER_KEY } from '../platforms/xiaomi';
 
 export function getConfig(): TokenViewerSettings {
     const config = vscode.workspace.getConfiguration('tokenViewer');
@@ -10,6 +11,20 @@ export function getConfig(): TokenViewerSettings {
         enableUsageNotification: config.get<boolean>('enableUsageNotification', true),
         notificationInterval: config.get<number>('notificationInterval', 30),
         showInStatusBar: config.get<boolean>('showInStatusBar', true),
+        xiaomiPlanType: config.get<XiaomiPlanType>('xiaomiPlanType', 'cn'),
+    };
+}
+
+export function resolvePlatformConfig(planType: XiaomiPlanType): PlatformConfig | undefined {
+    const plan = getXiaomiPlanConfig(planType);
+    if (!plan || plan.disabled) { return undefined; }
+    return {
+        apiUrl: plan.apiUrl,
+        jsonPath: plan.jsonPath,
+        totalPath: plan.totalPath,
+        usedPath: plan.usedPath,
+        loginUrl: XIAOMI_LOGIN_URL,
+        headerKey: XIAOMI_HEADER_KEY,
     };
 }
 

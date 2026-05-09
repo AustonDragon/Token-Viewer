@@ -72,6 +72,17 @@
           "type": "boolean",
           "default": true,
           "description": "是否在状态栏显示 Token 信息"
+        },
+        "tokenViewer.xiaomiPlanType": {
+          "type": "string",
+          "default": "cn",
+          "enum": ["cn", "sg", "balance"],
+          "enumDescriptions": [
+            "Token Plan (CN) - 国内区域",
+            "Token Plan (SG) - 新加坡区域",
+            "Balance - 余额直扣（即将支持）"
+          ],
+          "description": "小米 MiMo 计费模式"
         }
       }
     }

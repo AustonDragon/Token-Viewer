@@ -1,3 +1,5 @@
+export type XiaomiPlanType = 'cn' | 'sg' | 'balance';
+
 export interface PlatformConfig {
     apiUrl: string;
     jsonPath: string;
@@ -14,6 +16,7 @@ export interface TokenViewerSettings {
     enableUsageNotification: boolean;
     notificationInterval: number;
     showInStatusBar: boolean;
+    xiaomiPlanType: XiaomiPlanType;
 }
 
 export interface TokenData {

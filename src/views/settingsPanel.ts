@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { XIAOMI_CONFIG } from '../api/xiaomi';
+import { XIAOMI_PLANS, XIAOMI_LOGIN_URL, XiaomiPlanConfig } from '../platforms/xiaomi';
+import { XiaomiPlanType } from '../types';
 
 let panel: vscode.WebviewPanel | undefined;
 
@@ -23,21 +24,21 @@ export function openSettingsPanel(context: vscode.ExtensionContext): void {
             case 'save': {
                 const config = vscode.workspace.getConfiguration('tokenViewer');
                 await config.update('headers', { Cookie: message.cookie }, vscode.ConfigurationTarget.Global);
+                await config.update('xiaomiPlanType', message.xiaomiPlanType, vscode.ConfigurationTarget.Global);
                 await config.update('refreshInterval', message.refreshInterval, vscode.ConfigurationTarget.Global);
                 await config.update('alertThreshold', message.alertThreshold, vscode.ConfigurationTarget.Global);
                 await config.update('enableUsageNotification', message.enableUsageNotification, vscode.ConfigurationTarget.Global);
                 await config.update('notificationInterval', message.notificationInterval, vscode.ConfigurationTarget.Global);
                 await config.update('showInStatusBar', message.showInStatusBar, vscode.ConfigurationTarget.Global);
                 vscode.commands.executeCommand('tokenViewer.refresh');
+                vscode.commands.executeCommand('tokenViewer.refresh');
                 panel?.webview.postMessage({ type: 'saved' });
                 vscode.window.showInformationMessage('Token Viewer 设置已保存');
                 break;
             }
-            case 'getCookie': {
-                const config = vscode.workspace.getConfiguration('tokenViewer');
-                const headers = config.get<Record<string, string>>('headers', {});
-                const cookie = headers[XIAOMI_CONFIG.headerKey] || '';
-                panel?.webview.postMessage({ type: 'cookieData', cookie });
+            case 'getLoginUrl': {
+                const plan = XIAOMI_PLANS.find(p => p.id === message.planId);
+                panel?.webview.postMessage({ type: 'loginUrlData', url: plan ? XIAOMI_LOGIN_URL : '' });
                 break;
             }
         }
@@ -49,12 +50,23 @@ export function openSettingsPanel(context: vscode.ExtensionContext): void {
 function getSettingsHtml(context: vscode.ExtensionContext): string {
     const config = vscode.workspace.getConfiguration('tokenViewer');
     const headers = config.get<Record<string, string>>('headers', {});
-    const cookie = headers[XIAOMI_CONFIG.headerKey] || '';
+    const cookie = headers['Cookie'] || '';
+    const xiaomiPlanType = config.get<XiaomiPlanType>('xiaomiPlanType', 'cn');
     const refreshInterval = config.get<number>('refreshInterval', 10);
     const alertThreshold = config.get<number>('alertThreshold', 10000000);
     const enableUsageNotification = config.get<boolean>('enableUsageNotification', true);
     const notificationInterval = config.get<number>('notificationInterval', 30);
     const showInStatusBar = config.get<boolean>('showInStatusBar', true);
+
+    const planRadios = XIAOMI_PLANS.map(plan => {
+        const checked = plan.id === xiaomiPlanType ? 'checked' : '';
+        const disabled = plan.disabled ? 'disabled' : '';
+        const disabledHint = plan.disabled ? ' <span style="color:var(--description-fg);font-size:11px;">（即将支持）</span>' : '';
+        return `<div class="radio-item">
+            <input type="radio" name="planType" id="plan-${plan.id}" value="${plan.id}" ${checked} ${disabled}>
+            <label for="plan-${plan.id}">${plan.name}${disabledHint}</label>
+        </div>`;
+    }).join('\n');
 
     return /*html*/ `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -75,8 +87,6 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             --link-fg: var(--vscode-textLink-foreground);
             --description-fg: var(--vscode-descriptionForeground);
             --section-border: var(--vscode-widget-border, #3c3c3c);
-            --checkbox-bg: var(--vscode-checkbox-background);
-            --checkbox-border: var(--vscode-checkbox-border, #3c3c3c);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,9 +115,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             font-size: 13px;
         }
 
-        .section {
-            margin-bottom: 28px;
-        }
+        .section { margin-bottom: 28px; }
 
         .section-title {
             font-size: 14px;
@@ -117,19 +125,10 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             border-bottom: 1px solid var(--section-border);
         }
 
-        .form-group {
-            margin-bottom: 16px;
-        }
+        .form-group { margin-bottom: 16px; }
+        .form-group:last-child { margin-bottom: 0; }
 
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-
-        label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
+        label { display: block; font-weight: 500; margin-bottom: 4px; }
 
         .description {
             color: var(--description-fg);
@@ -151,9 +150,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             outline: none;
         }
 
-        input:focus, textarea:focus {
-            border-color: var(--link-fg);
-        }
+        input:focus, textarea:focus { border-color: var(--link-fg); }
 
         textarea {
             resize: vertical;
@@ -167,9 +164,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             gap: 12px;
         }
 
-        .inline-group input[type="number"] {
-            width: 120px;
-        }
+        .inline-group input[type="number"] { width: 120px; }
 
         .inline-group .unit {
             color: var(--description-fg);
@@ -193,6 +188,32 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             cursor: pointer;
         }
 
+        .radio-group { display: flex; flex-direction: column; gap: 8px; }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .radio-item input[type="radio"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .radio-item input[type="radio"]:disabled { cursor: not-allowed; }
+
+        .radio-item label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .radio-item input[type="radio"]:disabled + label {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
         .actions {
             margin-top: 32px;
             display: flex;
@@ -211,9 +232,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             font-weight: 500;
         }
 
-        .btn-primary:hover {
-            background: var(--button-hover);
-        }
+        .btn-primary:hover { background: var(--button-hover); }
 
         .btn-secondary {
             background: transparent;
@@ -225,9 +244,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             cursor: pointer;
         }
 
-        .btn-secondary:hover {
-            background: var(--input-bg);
-        }
+        .btn-secondary:hover { background: var(--input-bg); }
 
         .status-msg {
             font-size: 12px;
@@ -235,13 +252,8 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             display: none;
         }
 
-        .status-msg.show {
-            display: inline;
-        }
-
-        .status-msg.success {
-            color: #4ec9b0;
-        }
+        .status-msg.show { display: inline; }
+        .status-msg.success { color: #4ec9b0; }
 
         .link {
             color: var(--link-fg);
@@ -249,17 +261,13 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             cursor: pointer;
         }
 
-        .link:hover {
-            text-decoration: underline;
-        }
+        .link:hover { text-decoration: underline; }
 
         .cookie-section .input-wrapper {
             position: relative;
         }
 
-        .cookie-section textarea {
-            padding-right: 80px;
-        }
+        .cookie-section textarea { padding-right: 80px; }
 
         .clear-btn {
             position: absolute;
@@ -290,9 +298,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             color: var(--description-fg);
         }
 
-        .info-box strong {
-            color: var(--fg);
-        }
+        .info-box strong { color: var(--fg); }
     </style>
 </head>
 <body>
@@ -304,8 +310,15 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
 
         <div class="info-box">
             <strong>获取 Cookie 方法：</strong><br>
-            1. 浏览器打开 <a class="link" href="${XIAOMI_CONFIG.loginUrl}">${XIAOMI_CONFIG.loginUrl}</a><br>
-            2. 登录后按 <strong>F12</strong> → Network → 找到Usage → Headers → 复制 Cookie 的值
+            1. 浏览器打开 <a class="link" id="loginUrlLink" href="${XIAOMI_LOGIN_URL}">${XIAOMI_LOGIN_URL}</a><br>
+            2. 登录后按 <strong>F12</strong> → Network → 找到请求 → Headers → 复制 Cookie 的值
+        </div>
+
+        <div class="form-group">
+            <label>小米 MiMo 计费模式</label>
+            <div class="radio-group">
+                ${planRadios}
+            </div>
         </div>
 
         <div class="form-group cookie-section">
@@ -383,6 +396,8 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
 
         function save() {
             const cookie = document.getElementById('cookie').value.trim();
+            const planTypeEl = document.querySelector('input[name="planType"]:checked');
+            const xiaomiPlanType = planTypeEl ? planTypeEl.value : 'cn';
             const refreshInterval = parseInt(document.getElementById('refreshInterval').value) || 10;
             const alertThreshold = parseInt(document.getElementById('alertThreshold').value) || 10000000;
             const enableUsageNotification = document.getElementById('enableUsageNotification').checked;
@@ -401,6 +416,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             vscode.postMessage({
                 type: 'save',
                 cookie,
+                xiaomiPlanType,
                 refreshInterval,
                 alertThreshold,
                 enableUsageNotification,
@@ -411,6 +427,7 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
 
         function resetDefaults() {
             document.getElementById('cookie').value = '';
+            document.getElementById('plan-cn').checked = true;
             document.getElementById('refreshInterval').value = 10;
             document.getElementById('alertThreshold').value = 10000000;
             document.getElementById('enableUsageNotification').checked = true;
