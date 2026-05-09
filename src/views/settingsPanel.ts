@@ -23,7 +23,7 @@ export function openSettingsPanel(context: vscode.ExtensionContext): void {
         switch (message.type) {
             case 'save': {
                 const config = vscode.workspace.getConfiguration('tokenViewer');
-                await config.update('headers', { Cookie: message.cookie }, vscode.ConfigurationTarget.Global);
+                await config.update('cookie', message.cookie, vscode.ConfigurationTarget.Global);
                 await config.update('xiaomiPlanType', message.xiaomiPlanType, vscode.ConfigurationTarget.Global);
                 await config.update('refreshInterval', message.refreshInterval, vscode.ConfigurationTarget.Global);
                 await config.update('alertThreshold', message.alertThreshold, vscode.ConfigurationTarget.Global);
@@ -49,8 +49,7 @@ export function openSettingsPanel(context: vscode.ExtensionContext): void {
 
 function getSettingsHtml(context: vscode.ExtensionContext): string {
     const config = vscode.workspace.getConfiguration('tokenViewer');
-    const headers = config.get<Record<string, string>>('headers', {});
-    const cookie = headers['Cookie'] || '';
+    const cookie = config.get<string>('cookie', '');
     const xiaomiPlanType = config.get<XiaomiPlanType>('xiaomiPlanType', 'cn');
     const refreshInterval = config.get<number>('refreshInterval', 10);
     const alertThreshold = config.get<number>('alertThreshold', 10000000);

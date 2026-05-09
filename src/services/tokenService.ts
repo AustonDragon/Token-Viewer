@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getConfig, formatCompact, resolvePlatformConfig } from '../config/settings';
+import { getConfig, formatCompact, resolvePlatformConfig, getCurrentCookie } from '../config/settings';
 import { resolveJsonPath } from '../utils/jsonPath';
 import { httpGet } from '../utils/http';
 import { isAuthError, triggerCookieRefresh } from './cookieService';
@@ -80,10 +80,11 @@ export async function fetchTokenCount(context: vscode.ExtensionContext): Promise
         return;
     }
 
-    if (!config.headers[platformConfig.headerKey]) {
+    const cookie = getCurrentCookie(config);
+    if (!cookie) {
         statusBarItem.text = '$(warning) Token: 未配置';
         statusBarItem.tooltip = '请点击状态栏 → Token Viewer: 配置 Cookie';
-        outputChannel.appendLine(`[Token Viewer] 警告：未配置 ${platformConfig.headerKey}，请运行 Token Viewer: 配置 Cookie`);
+        outputChannel.appendLine(`[Token Viewer] 警告：未配置 Cookie，请运行 Token Viewer: 配置 Cookie`);
         return;
     }
 
@@ -91,7 +92,7 @@ export async function fetchTokenCount(context: vscode.ExtensionContext): Promise
         const headers: Record<string, string> = {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            ...config.headers,
+            'Cookie': cookie,
         };
 
         outputChannel.appendLine(`[Token Viewer] 正在请求: ${platformConfig.apiUrl}`);
@@ -188,7 +189,7 @@ export async function fetchTokenCount(context: vscode.ExtensionContext): Promise
                 cookieErrorCount = 0;
                 await triggerCookieRefresh(context, platformConfig, fetchTokenCount);
             } else {
-                handleFetchError(errorMsg, `${platformConfig.headerKey} 可能已过期，连续失败 2 次后将自动打开登录页面`);
+                handleFetchError(errorMsg, 'Cookie 可能已过期，连续失败 2 次后将自动打开登录页面');
             }
         } else {
             handleFetchError(errorMsg, undefined);

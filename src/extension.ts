@@ -3,9 +3,11 @@ import { initAlertState } from './services/alertService';
 import { configureCookie } from './services/cookieService';
 import { initTokenService, setupTimer, clearTimer, fetchTokenCount } from './services/tokenService';
 import { openSettingsPanel } from './views/settingsPanel';
-import { resolvePlatformConfig, getConfig } from './config/settings';
+import { resolvePlatformConfig, getConfig, migrateOldCookie } from './config/settings';
 
 export function activate(context: vscode.ExtensionContext): void {
+    migrateOldCookie();
+
     const { statusBarItem, outputChannel } = initTokenService(context);
 
     initAlertState(context);

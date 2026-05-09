@@ -11,6 +11,7 @@ export interface PlatformConfig {
 
 export interface TokenViewerSettings {
     headers: Record<string, string>;
+    cookie: string;
     refreshInterval: number;
     alertThreshold: number;
     enableUsageNotification: boolean;

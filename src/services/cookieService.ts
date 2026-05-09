@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PlatformConfig } from '../types';
+import { getCurrentCookie } from '../config/settings';
 
 export function isAuthError(message: string): boolean {
     const lowerMsg = message.toLowerCase();
@@ -20,8 +21,7 @@ export async function configureCookie(
     onRefresh: (ctx: vscode.ExtensionContext) => Promise<void>
 ): Promise<void> {
     const config = vscode.workspace.getConfiguration('tokenViewer');
-    const currentHeaders = config.get<Record<string, string>>('headers', {});
-    const currentCookie = currentHeaders[platformConfig.headerKey] || '';
+    const currentCookie = config.get<string>('cookie', '');
 
     const cookieValue = await vscode.window.showInputBox({
         prompt: `请粘贴 Cookie\n\n` +
@@ -41,8 +41,7 @@ export async function configureCookie(
         return;
     }
 
-    const headers: Record<string, string> = { [platformConfig.headerKey]: cookieValue };
-    await config.update('headers', headers, vscode.ConfigurationTarget.Global);
+    await config.update('cookie', cookieValue, vscode.ConfigurationTarget.Global);
 
     vscode.window.showInformationMessage('✅ Cookie 已保存，正在刷新...');
 
@@ -84,7 +83,7 @@ export async function triggerCookieRefresh(
         if (newCookie === undefined) { return; }
 
         const vscodeConfig = vscode.workspace.getConfiguration('tokenViewer');
-        await vscodeConfig.update('headers', { [platformConfig.headerKey]: newCookie }, vscode.ConfigurationTarget.Global);
+        await vscodeConfig.update('cookie', newCookie, vscode.ConfigurationTarget.Global);
 
         await onRefresh(context);
         vscode.window.showInformationMessage('✅ Cookie 已更新，Token 数据已刷新！');

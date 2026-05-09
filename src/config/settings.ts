@@ -4,15 +4,39 @@ import { getXiaomiPlanConfig, XIAOMI_LOGIN_URL, XIAOMI_HEADER_KEY } from '../pla
 
 export function getConfig(): TokenViewerSettings {
     const config = vscode.workspace.getConfiguration('tokenViewer');
+    const headers = config.get<Record<string, string>>('headers', {});
+    const cookie = config.get<string>('cookie', '');
+    const xiaomiPlanType = config.get<XiaomiPlanType>('xiaomiPlanType', 'cn');
+
     return {
-        headers: config.get<Record<string, string>>('headers', {}),
+        headers,
+        cookie,
         refreshInterval: config.get<number>('refreshInterval', 10),
         alertThreshold: config.get<number>('alertThreshold', 10000000),
         enableUsageNotification: config.get<boolean>('enableUsageNotification', true),
         notificationInterval: config.get<number>('notificationInterval', 30),
         showInStatusBar: config.get<boolean>('showInStatusBar', true),
-        xiaomiPlanType: config.get<XiaomiPlanType>('xiaomiPlanType', 'cn'),
+        xiaomiPlanType,
     };
+}
+
+export function getCurrentCookie(settings: TokenViewerSettings): string {
+    if (settings.cookie) {
+        return settings.cookie;
+    }
+    return settings.headers['Cookie'] || settings.headers['cookie'] || '';
+}
+
+export async function migrateOldCookie(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('tokenViewer');
+    const headers = config.get<Record<string, string>>('headers', {});
+    const cookie = config.get<string>('cookie', '');
+    const oldCookie = headers['Cookie'] || headers['cookie'] || '';
+
+    if (oldCookie && !cookie) {
+        await config.update('cookie', oldCookie, vscode.ConfigurationTarget.Global);
+        await config.update('headers', {}, vscode.ConfigurationTarget.Global);
+    }
 }
 
 export function resolvePlatformConfig(planType: XiaomiPlanType): PlatformConfig | undefined {
