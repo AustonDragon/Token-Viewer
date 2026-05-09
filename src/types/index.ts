@@ -11,6 +11,9 @@ export interface TokenViewerSettings {
     headers: Record<string, string>;
     refreshInterval: number;
     alertThreshold: number;
+    enableUsageNotification: boolean;
+    notificationInterval: number;
+    showInStatusBar: boolean;
 }
 
 export interface TokenData {

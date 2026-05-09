@@ -12,10 +12,11 @@ export function initAlertState(context: vscode.ExtensionContext): void {
 
 export function handleUsageNotification(
     context: vscode.ExtensionContext,
-    tokenNum: number
+    tokenNum: number,
+    notificationInterval: number
 ): void {
     const nowMs = Date.now();
-    const NOTIFY_INTERVAL = 30 * 60 * 1000;
+    const NOTIFY_INTERVAL = notificationInterval * 60 * 1000;
 
     if (lastNotifyTime !== undefined && lastNotifyToken !== undefined && (nowMs - lastNotifyTime) >= NOTIFY_INTERVAL) {
         const usedAmount = lastNotifyToken - tokenNum;

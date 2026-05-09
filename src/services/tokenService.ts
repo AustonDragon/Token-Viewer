@@ -27,8 +27,8 @@ export function initTokenService(
         100
     );
     statusBarItem.text = '$(sync~spin) Token: 加载中...';
-    statusBarItem.tooltip = 'Token Viewer - 点击刷新';
-    statusBarItem.command = 'tokenViewer.refresh';
+    statusBarItem.tooltip = 'Token Viewer - 点击打开菜单';
+    statusBarItem.command = 'tokenViewer.menu';
     statusBarItem.show();
 
     lastTokenCount = ctx.globalState.get<number>('tokenViewer.lastTokenCount');
@@ -131,7 +131,15 @@ export async function fetchTokenCount(context: vscode.ExtensionContext): Promise
         lastTokenCount = tokenNum;
         context.globalState.update('tokenViewer.lastTokenCount', tokenNum);
 
-        handleUsageNotification(context, tokenNum);
+        if (config.enableUsageNotification) {
+            handleUsageNotification(context, tokenNum, config.notificationInterval);
+        }
+
+        if (config.showInStatusBar) {
+            statusBarItem.show();
+        } else {
+            statusBarItem.hide();
+        }
 
         const compact = formatCompact(tokenNum);
         const fullFormatted = tokenNum.toLocaleString('zh-CN');
@@ -145,7 +153,7 @@ export async function fetchTokenCount(context: vscode.ExtensionContext): Promise
         if (totalTokens !== undefined) {
             tooltipText += `\n总量: ${totalTokens.toLocaleString('zh-CN')}（${formatCompact(totalTokens)}）`;
         }
-        tooltipText += `\n最后更新: ${now}\n点击刷新`;
+        tooltipText += `\n最后更新: ${now}\n点击打开菜单`;
         statusBarItem.tooltip = tooltipText;
 
         checkAlertThreshold(statusBarItem, tokenNum, percentStr, config.alertThreshold, fullFormatted);

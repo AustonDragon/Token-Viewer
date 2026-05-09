@@ -27,6 +27,14 @@
       {
         "command": "tokenViewer.configure",
         "title": "Token Viewer: 配置 Cookie"
+      },
+      {
+        "command": "tokenViewer.openSettings",
+        "title": "Token Viewer: 打开设置面板"
+      },
+      {
+        "command": "tokenViewer.menu",
+        "title": "Token Viewer: 菜单"
       }
     ],
     "configuration": {
@@ -48,6 +56,22 @@
           "default": 10000000,
           "minimum": 0,
           "description": "告警阈值，当剩余 Token 小于等于此值时显示警告"
+        },
+        "tokenViewer.enableUsageNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用用量报告通知，定期弹出通知显示 Token 消耗情况"
+        },
+        "tokenViewer.notificationInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "用量报告通知的间隔（分钟），最小值为 5 分钟"
+        },
+        "tokenViewer.showInStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否在状态栏显示 Token 信息"
         }
       }
     }

@@ -7,6 +7,9 @@ export function getConfig(): TokenViewerSettings {
         headers: config.get<Record<string, string>>('headers', {}),
         refreshInterval: config.get<number>('refreshInterval', 10),
         alertThreshold: config.get<number>('alertThreshold', 10000000),
+        enableUsageNotification: config.get<boolean>('enableUsageNotification', true),
+        notificationInterval: config.get<number>('notificationInterval', 30),
+        showInStatusBar: config.get<boolean>('showInStatusBar', true),
     };
 }
 
