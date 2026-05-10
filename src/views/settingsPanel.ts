@@ -41,6 +41,10 @@ export function openSettingsPanel(context: vscode.ExtensionContext): void {
                 panel?.webview.postMessage({ type: 'loginUrlData', url: plan ? XIAOMI_LOGIN_URL : '' });
                 break;
             }
+            case 'fetchFromBrowser': {
+                vscode.commands.executeCommand('tokenViewer.fetchFromBrowser');
+                break;
+            }
         }
     });
 
@@ -309,8 +313,13 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
 
         <div class="info-box">
             <strong>获取 Cookie 方法：</strong><br>
-            1. 浏览器打开 <a class="link" id="loginUrlLink" href="${XIAOMI_LOGIN_URL}">${XIAOMI_LOGIN_URL}</a><br>
-            2. 登录后按 <strong>F12</strong> → Network → 找到请求 → Headers → 复制 Cookie 的值
+            方式一（推荐）：点击下方「从浏览器获取 Cookie」按钮，浏览器会自动捕获 Cookie 并回传<br>
+            方式二：浏览器打开 <a class="link" id="loginUrlLink" href="${XIAOMI_LOGIN_URL}">${XIAOMI_LOGIN_URL}</a>，登录后按 <strong>F12</strong> → Network → 找到请求 → Headers → 复制 Cookie 的值
+        </div>
+
+        <div class="form-group">
+            <button class="btn-secondary" onclick="fetchFromBrowser()" style="width: 100%;">🌐 从浏览器获取 Cookie</button>
+            <div class="description" style="margin-top: 4px;">需要安装 Cookie Usage Extractor 扩展，点击后自动打开浏览器并捕获 Cookie</div>
         </div>
 
         <div class="form-group">
@@ -335,9 +344,9 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
 
         <div class="form-group">
             <label for="refreshInterval">自动刷新间隔</label>
-            <div class="description">Token 数据自动刷新的时间间隔，最小 10 秒</div>
+            <div class="description">Token 数据自动刷新的时间间隔，最小 3 秒</div>
             <div class="inline-group">
-                <input type="number" id="refreshInterval" value="${refreshInterval}" min="10" step="1">
+                <input type="number" id="refreshInterval" value="${refreshInterval}" min="3" step="1">
                 <span class="unit">秒</span>
             </div>
         </div>
@@ -403,8 +412,8 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             const notificationInterval = parseInt(document.getElementById('notificationInterval').value) || 30;
             const showInStatusBar = document.getElementById('showInStatusBar').checked;
 
-            if (refreshInterval < 10) {
-                alert('刷新间隔不能小于 10 秒');
+            if (refreshInterval < 3) {
+                alert('刷新间隔不能小于 3 秒');
                 return;
             }
             if (notificationInterval < 5) {
@@ -432,6 +441,10 @@ function getSettingsHtml(context: vscode.ExtensionContext): string {
             document.getElementById('enableUsageNotification').checked = true;
             document.getElementById('notificationInterval').value = 30;
             document.getElementById('showInStatusBar').checked = true;
+        }
+
+        function fetchFromBrowser() {
+            vscode.postMessage({ type: 'fetchFromBrowser' });
         }
 
         window.addEventListener('message', (event) => {

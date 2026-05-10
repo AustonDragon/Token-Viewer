@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import { initAlertState } from './services/alertService';
 import { configureCookie } from './services/cookieService';
+import { startBrowserFetch, handleCallbackUri, CALLBACK_PATH } from './api/browserCallback';
 import { initTokenService, setupTimer, clearTimer, fetchTokenCount } from './services/tokenService';
 import { openSettingsPanel } from './views/settingsPanel';
 import { resolvePlatformConfig, getConfig, migrateOldCookie } from './config/settings';
+
+let uriHandler: vscode.Disposable | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
     migrateOldCookie();
@@ -33,6 +36,20 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    const fetchFromBrowserCommand = vscode.commands.registerCommand(
+        'tokenViewer.fetchFromBrowser',
+        async () => {
+            const config = getConfig();
+            const platformConfig = resolvePlatformConfig(config.xiaomiPlanType);
+            if (!platformConfig) {
+                vscode.window.showWarningMessage('当前计费模式暂不支持，请切换到 Token Plan (CN) 或 (SG)');
+                return;
+            }
+            const apiBase = platformConfig.apiUrl.split('?')[0];
+            await startBrowserFetch(context, apiBase);
+        }
+    );
+
     const openSettingsCommand = vscode.commands.registerCommand(
         'tokenViewer.openSettings',
         () => openSettingsPanel(context)
@@ -45,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 { label: '$(refresh) 刷新 Token', action: 'refresh' as const },
                 { label: '$(settings-gear) 打开设置面板', action: 'settings' as const },
                 { label: '$(key) 配置 Cookie', action: 'cookie' as const },
+                { label: '$(browser) 从浏览器获取 Cookie', action: 'fetchBrowser' as const },
             ];
             const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Token Viewer' });
             if (!picked) { return; }
@@ -61,9 +79,18 @@ export function activate(context: vscode.ExtensionContext): void {
                     }
                     break;
                 }
+                case 'fetchBrowser': vscode.commands.executeCommand('tokenViewer.fetchFromBrowser'); break;
             }
         }
     );
+
+    uriHandler = vscode.window.registerUriHandler({
+        handleUri(uri: vscode.Uri) {
+            if (uri.path === '/callback') {
+                handleCallbackUri(context, uri, fetchTokenCount);
+            }
+        }
+    });
 
     const configChangeListener = vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('tokenViewer')) {
@@ -73,7 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    context.subscriptions.push(statusBarItem, outputChannel, refreshCommand, configureCommand, openSettingsCommand, menuCommand, configChangeListener);
+    context.subscriptions.push(statusBarItem, outputChannel, refreshCommand, configureCommand, fetchFromBrowserCommand, openSettingsCommand, menuCommand, uriHandler, configChangeListener);
 
     fetchTokenCount(context);
     setupTimer(context);

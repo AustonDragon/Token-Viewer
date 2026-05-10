@@ -2,7 +2,7 @@
   "name": "token-viewer",
   "displayName": "Token Viewer",
   "description": "在 VSCode 状态栏实时显示小米 MiMo 平台的剩余 Token 数量",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "bynlk",
   "repository": {
     "type": "git",
@@ -35,6 +35,10 @@
       {
         "command": "tokenViewer.menu",
         "title": "Token Viewer: 菜单"
+      },
+      {
+        "command": "tokenViewer.fetchFromBrowser",
+        "title": "Token Viewer: 从浏览器获取 Cookie"
       }
     ],
     "configuration": {
@@ -81,7 +85,11 @@
         "tokenViewer.xiaomiPlanType": {
           "type": "string",
           "default": "cn",
-          "enum": ["cn", "sg", "balance"],
+          "enum": [
+            "cn",
+            "sg",
+            "balance"
+          ],
           "enumDescriptions": [
             "Token Plan (CN) - 国内区域",
             "Token Plan (SG) - 新加坡区域",
@@ -100,6 +108,7 @@
   "devDependencies": {
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.74.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.3.0"
   }
 }
