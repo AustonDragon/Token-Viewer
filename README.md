@@ -8,18 +8,21 @@
 
 <p align="center">
   VSCode 状态栏实时显示小米 MiMo 平台的剩余 Token 数量<br>
-  缩写显示 · 百分比 · 用量报告 · Cookie 过期自动检测
+  缩写显示 · 百分比 · 用量报告 · 浏览器自动获取 Cookie
 </p>
 
 ---
 
 ## 功能特性
 
+- **浏览器自动获取 Cookie** - 一键启动浏览器登录，点击"我已登录"按钮即可自动提取 Cookie
+- **登录状态持久化** - 首次登录后自动保存浏览器数据，下次获取无需重新登录
+- **Cookie 自动恢复** - 启动时自动从本地缓存恢复 Cookie，无需重复配置
 - **状态栏缩写显示** - 用 `1.2M`、`500K` 等紧凑格式显示，节省状态栏空间
 - **剩余百分比** - 同时显示 Token 剩余百分比（如 `1.2M (45.2%)`）
 - **用量报告** - 每 30 分钟弹出通知，显示消耗量和剩余量
 - **自动定时刷新** - 默认每 10 秒刷新，可自定义间隔
-- **Cookie 过期检测** - 连续 2 次认证失败后自动打开登录页面，引导更新 Cookie
+- **Cookie 过期检测** - 连续 2 次认证失败后自动提示更新 Cookie
 - **告警通知** - Token 低于阈值时状态栏变色并弹出警告
 - **点击刷新** - 点击状态栏项立即刷新
 - **跨会话保留** - 上次获取的 Token 数量在重启 VSCode 后仍然显示
@@ -46,12 +49,22 @@ vsce package
 
 安装后只需配置一个东西：**Cookie**。
 
-### 快速配置
+### 方式一：浏览器自动获取（推荐）
+
+1. 按 `Ctrl+Shift+P`，输入 `Token Viewer: 浏览器自动获取 Cookie`
+2. 浏览器会自动打开小米登录页面
+3. 在浏览器中完成登录
+4. 回到 VSCode 点击 **"我已登录"** 按钮
+5. Cookie 自动提取并保存
+
+> 首次登录后，浏览器数据会自动保存，下次获取无需重新登录。
+
+### 方式二：手动配置
 
 1. 按 `Ctrl+Shift+P`，输入 `Token Viewer: 配置 Cookie`
 2. 粘贴你的 Cookie，完成
 
-### 如何获取 Cookie
+### 如何手动获取 Cookie
 
 1. 浏览器打开 https://platform.xiaomimimo.com/console/plan-manage 并登录
 2. 按 `F12` 打开开发者工具 → **Network** 标签页
@@ -73,8 +86,12 @@ vsce package
 
 | 命令 | 说明 |
 |------|------|
-| `Token Viewer: 配置 Cookie` | 打开 Cookie 配置向导 |
+| `Token Viewer: 浏览器自动获取 Cookie` | 启动浏览器自动登录并获取 Cookie |
+| `Token Viewer: 配置 Cookie` | 手动配置 Cookie |
 | `Token Viewer: 刷新 Token 数量` | 立即刷新 |
+| `Token Viewer: 启动代理拦截` | 启动本地代理拦截 Cookie |
+| `Token Viewer: 停止代理` | 停止代理 |
+| `Token Viewer: 代理状态` | 查看代理运行状态 |
 
 ## 常见问题
 
@@ -82,7 +99,10 @@ vsce package
 按 `Ctrl+Shift+U` 打开输出面板，选择 **Token Viewer** 查看日志。通常是 Cookie 过期导致。
 
 **Cookie 过期了？**
-插件会自动检测并弹出提示，点击「更新 Cookie」即可。也可以手动运行 `Token Viewer: 配置 Cookie`。
+插件会自动检测并弹出提示，选择"浏览器自动获取"即可一键重新登录。也可以手动运行 `Token Viewer: 浏览器自动获取 Cookie`。
+
+**每次都要重新登录？**
+不会。首次登录后浏览器数据会自动保存在本地，下次获取 Cookie 时会保留登录状态。
 
 **用量报告什么时候弹出？**
 每 30 分钟自动弹出一次通知，显示这段时间内的 Token 消耗量和剩余量。

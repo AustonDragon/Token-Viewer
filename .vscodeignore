@@ -1,8 +1,13 @@
 .vscode/**
 .vscode-test/**
+.claude/**
+docs/**
 src/**
 .gitignore
 tsconfig.json
-node_modules/**
+node_modules/@types/**
+node_modules/typescript/**
+node_modules/undici-types/**
 **/*.ts
 **/*.map
+项目记录.md
