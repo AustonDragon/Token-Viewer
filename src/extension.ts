@@ -1,18 +1,25 @@
 import * as vscode from 'vscode';
 
 // ============================================================
-// Token Viewer - 小米 MiMo Token 监控插件
-// 专注于 platform.xiaomimimo.com 的 Token 余额监控
+// Token Viewer - 小米 MiMo Credits 监控插件
+// 专注于 platform.xiaomimimo.com 的 Credits 额度监控
 // ============================================================
 
 /** 小米 MiMo 平台配置 */
 const XIAOMI_CONFIG = {
     apiUrl: 'https://platform.xiaomimimo.com/api/v1/tokenPlan/usage',
+    usageApiUrl: 'https://platform.xiaomimimo.com/api/v1/usage/token-plan/list',
     jsonPath: 'data.usage.items[0].limit - data.usage.items[0].used',
     totalPath: 'data.usage.items[0].limit',
     usedPath: 'data.usage.items[0].used',
     loginUrl: 'https://platform.xiaomimimo.com/console/plan-manage',
     headerKey: 'Cookie',
+};
+
+/** 各模型 Credit 消耗比例 */
+const MODEL_RATES = {
+    'mimo-v2.5-pro': { cacheHit: 2.5, input: 300, output: 600 },
+    'mimo-v2.5':     { cacheHit: 2,   input: 100, output: 200 },
 };
 
 /** 全局状态 */
@@ -25,20 +32,22 @@ let cookieErrorCount: number = 0;
 let isRefreshingCookie: boolean = false;
 let lastNotifyTime: number | undefined;
 let lastNotifyToken: number | undefined;
+/** 各模型上次用量快照（用于半小时报告计算差值） */
+let lastModelUsage: Record<string, number> | undefined;
 
 // ============================================================
 // 激活函数 - 插件入口
 // ============================================================
 export function activate(context: vscode.ExtensionContext): void {
     outputChannel = vscode.window.createOutputChannel('Token Viewer');
-    outputChannel.appendLine('[Token Viewer] 插件已激活（小米 MiMo Token 监控）');
+    outputChannel.appendLine('[Token Viewer] 插件已激活（小米 MiMo Credits 监控）');
 
     // 创建状态栏项
     statusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
         100
     );
-    statusBarItem.text = '$(sync~spin) Token: 加载中...';
+    statusBarItem.text = '$(sync~spin) Credits: 加载中...';
     statusBarItem.tooltip = 'Token Viewer - 点击刷新';
     statusBarItem.command = 'tokenViewer.refresh';
     statusBarItem.show();
@@ -69,7 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(statusBarItem, outputChannel, refreshCommand, configureCommand, configChangeListener);
 
-    // 恢复上次的 Token 数量
+    // 恢复上次的 Credits
     lastTokenCount = context.globalState.get<number>('tokenViewer.lastTokenCount');
     lastNotifyTime = context.globalState.get<number>('tokenViewer.lastNotifyTime');
     lastNotifyToken = context.globalState.get<number>('tokenViewer.lastNotifyToken');
@@ -133,7 +142,7 @@ function getConfig() {
     return {
         headers: config.get<Record<string, string>>('headers', {}),
         refreshInterval: config.get<number>('refreshInterval', 10),
-        alertThreshold: config.get<number>('alertThreshold', 10000000),
+        alertThreshold: config.get<number>('alertThreshold', 100000000),
     };
 }
 
@@ -158,14 +167,14 @@ function setupTimer(context: vscode.ExtensionContext): void {
 }
 
 // ============================================================
-// 获取 Token 数量
+// 获取 Credits
 // ============================================================
 async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> {
     const config = getConfig();
 
     // 检查 Cookie 是否配置
     if (!config.headers['Cookie']) {
-        statusBarItem.text = '$(warning) Token: 未配置';
+        statusBarItem.text = '$(warning) Credits: 未配置';
         statusBarItem.tooltip = '请点击状态栏 → Token Viewer: 配置 Cookie';
         outputChannel.appendLine('[Token Viewer] 警告：未配置 Cookie，请运行 Token Viewer: 配置 Cookie');
         return;
@@ -192,7 +201,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             return;
         }
 
-        // 提取 Token 数量（剩余量）
+        // 提取 Credits（剩余量）
         const tokenCount = resolveJsonPath(jsonData, XIAOMI_CONFIG.jsonPath);
 
         if (tokenCount === undefined || tokenCount === null) {
@@ -236,19 +245,14 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
         lastTokenCount = tokenNum;
         context.globalState.update('tokenViewer.lastTokenCount', tokenNum);
 
-        // 半小时用量提醒
+        // 半小时用量提醒（按模型分拆）
         const nowMs = Date.now();
         const NOTIFY_INTERVAL = 30 * 60 * 1000;
-        if (lastNotifyTime !== undefined && lastNotifyToken !== undefined && (nowMs - lastNotifyTime) >= NOTIFY_INTERVAL) {
-            const usedAmount = lastNotifyToken - tokenNum;
-            if (usedAmount > 0) {
-                const elapsed = Math.round((nowMs - lastNotifyTime) / 60000);
-                const usedCompact = formatCompact(usedAmount);
-                const currentCompact = formatCompact(tokenNum);
-                vscode.window.showInformationMessage(
-                    `🤖 Token${elapsed} 分钟用量报告\n 📉消耗: ${usedCompact}\n 💰剩余: ${currentCompact}`
-                );
-            }
+        if (lastNotifyTime !== undefined && (nowMs - lastNotifyTime) >= NOTIFY_INTERVAL) {
+            const elapsed = Math.round((nowMs - lastNotifyTime) / 60000);
+            reportModelUsage(headers, tokenNum, elapsed).catch(err => {
+                outputChannel.appendLine(`[Token Viewer] 模型用量报告失败: ${err instanceof Error ? err.message : String(err)}`);
+            });
             lastNotifyTime = nowMs;
             lastNotifyToken = tokenNum;
             context.globalState.update('tokenViewer.lastNotifyTime', nowMs);
@@ -266,14 +270,27 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
         const percentStr = percentage !== undefined ? ` (${percentage.toFixed(1)}%)` : '';
         statusBarItem.text = `$(robot) ${compact}${percentStr}`;
         const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-        let tooltipText = `Token Viewer - 小米 MiMo\n当前剩余: ${fullFormatted}（${compact}）`;
+        let tooltipText = `Token Viewer - 小米 MiMo Credits\n当前剩余: ${fullFormatted}（${compact}）`;
         if (percentage !== undefined) {
             tooltipText += `\n剩余百分比: ${percentage.toFixed(1)}%`;
         }
         if (totalTokens !== undefined) {
             tooltipText += `\n总量: ${totalTokens.toLocaleString('zh-CN')}（${formatCompact(totalTokens)}）`;
         }
-        tooltipText += `\n最后更新: ${now}\n点击刷新`;
+
+        // 获取当天各模型用量
+        const todayUsage = await fetchTodayUsage(headers);
+        if (todayUsage) {
+            tooltipText += `\n\n--- 今日用量 ---`;
+            tooltipText += todayUsage;
+        }
+
+        tooltipText += `\n\n--- 消耗比例 (Credits/Token) ---`;
+        for (const [model, rates] of Object.entries(MODEL_RATES)) {
+            tooltipText += `\n${model}: 缓存${rates.cacheHit} | 输入${rates.input} | 输出${rates.output}`;
+        }
+        tooltipText += `\nTTS 系列: 免费`;
+        tooltipText += `\n\n最后更新: ${now}\n点击刷新`;
         statusBarItem.tooltip = tooltipText;
 
         // 告警
@@ -282,7 +299,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             if (!alertShown) {
                 alertShown = true;
                 vscode.window.showWarningMessage(
-                    `⚠️ Token 不足！当前剩余: ${fullFormatted}${percentStr}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
+                    `⚠️ Credits 不足！当前剩余: ${fullFormatted}${percentStr}，阈值: ${config.alertThreshold.toLocaleString('zh-CN')}`
                 );
             }
         } else {
@@ -290,7 +307,7 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             alertShown = false;
         }
 
-        outputChannel.appendLine(`[Token Viewer] ✅ Token 数量: ${fullFormatted}${percentStr}`);
+        outputChannel.appendLine(`[Token Viewer] ✅ Credits: ${fullFormatted}${percentStr}`);
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -309,6 +326,159 @@ async function fetchTokenCount(context: vscode.ExtensionContext): Promise<void> 
             handleFetchError(errorMsg, undefined);
         }
     }
+}
+
+// ============================================================
+// 按模型用量报告
+// ============================================================
+async function reportModelUsage(
+    headers: Record<string, string>,
+    currentCredits: number,
+    elapsedMin: number
+): Promise<void> {
+    const postHeaders: Record<string, string> = {
+        ...headers,
+        'origin': 'https://platform.xiaomimimo.com',
+        'referer': 'https://platform.xiaomimimo.com/console/plan-manage',
+        'x-timezone': 'Asia/Shanghai',
+    };
+    const now = new Date();
+    const body = JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 });
+    const url = buildUsageUrl(headers['Cookie'] || '');
+    const responseBody = await httpPost(url, postHeaders, body);
+    const json = JSON.parse(responseBody);
+
+    if (json.code !== 0 || !Array.isArray(json.data)) {
+        throw new Error(`API 返回异常: code=${json.code}`);
+    }
+
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayEntries: Record<string, { inputHit: number; inputMiss: number; output: number; requests: number }> = {};
+
+    for (const item of json.data) {
+        if (item.date !== today) { continue; }
+        const model = item.model;
+        if (!todayEntries[model]) {
+            todayEntries[model] = { inputHit: 0, inputMiss: 0, output: 0, requests: 0 };
+        }
+        todayEntries[model].inputHit += item.inputHitToken || 0;
+        todayEntries[model].inputMiss += item.inputMissToken || 0;
+        todayEntries[model].output += item.outputToken || 0;
+        todayEntries[model].requests += item.requestCount || 0;
+    }
+
+    // 计算差值
+    const lines: string[] = [];
+    if (lastModelUsage) {
+        for (const [model, entry] of Object.entries(todayEntries)) {
+            const prev = lastModelUsage[model] || 0;
+            const delta = entry.inputHit + entry.inputMiss + entry.output - prev;
+            if (delta > 0) {
+                lines.push(`  ${model}: ${formatCompact(delta)} (${entry.requests}次)`);
+            }
+        }
+    }
+
+    // 更新快照
+    const newSnapshot: Record<string, number> = {};
+    for (const [model, entry] of Object.entries(todayEntries)) {
+        newSnapshot[model] = entry.inputHit + entry.inputMiss + entry.output;
+    }
+    lastModelUsage = newSnapshot;
+
+    // 发送通知
+    if (lines.length > 0) {
+        const currentCompact = formatCompact(currentCredits);
+        vscode.window.showInformationMessage(
+            `🤖 ${elapsedMin}分钟用量报告\n${lines.join('\n')}\n💰 Credits 剩余: ${currentCompact}`
+        );
+    } else {
+        // 首次快照，无对比数据
+        const currentCompact = formatCompact(currentCredits);
+        const summary = Object.entries(todayEntries)
+            .map(([m, e]) => `  ${m}: ${formatCompact(e.inputHit + e.inputMiss + e.output)}`)
+            .join('\n');
+        if (summary) {
+            vscode.window.showInformationMessage(
+                `🤖 今日累计用量\n${summary}\n💰 Credits 剩余: ${currentCompact}`
+            );
+        }
+    }
+}
+
+// ============================================================
+// 构建用量 API URL（从 Cookie 提取 api-platform_ph 拼入查询参数）
+// ============================================================
+function buildUsageUrl(cookie: string): string {
+    const match = cookie.match(/api-platform_ph="?([^";]+)/);
+    if (match) {
+        return `${XIAOMI_CONFIG.usageApiUrl}?api-platform_ph=${encodeURIComponent(match[1])}`;
+    }
+    return XIAOMI_CONFIG.usageApiUrl;
+}
+
+// ============================================================
+// 获取当天各模型用量（tooltip 用）
+// ============================================================
+async function fetchTodayUsage(headers: Record<string, string>): Promise<string | null> {
+    try {
+        const postHeaders: Record<string, string> = {
+            ...headers,
+            'origin': 'https://platform.xiaomimimo.com',
+            'referer': 'https://platform.xiaomimimo.com/console/plan-manage',
+            'x-timezone': 'Asia/Shanghai',
+        };
+        const now = new Date();
+        const body = JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 });
+        const url = buildUsageUrl(headers['Cookie'] || '');
+        outputChannel.appendLine(`[Token Viewer] 请求今日用量: ${url}`);
+        const responseBody = await httpPost(url, postHeaders, body);
+        outputChannel.appendLine(`[Token Viewer] 用量 API 响应: ${responseBody.substring(0, 300)}`);
+        const json = JSON.parse(responseBody);
+
+        if (json.code !== 0 || !Array.isArray(json.data)) {
+            outputChannel.appendLine(`[Token Viewer] 用量 API 返回异常: code=${json.code}, message=${json.message}`);
+            return null;
+        }
+
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const todayEntries: Record<string, { total: number; inputHit: number; inputMiss: number; output: number; requests: number }> = {};
+
+        for (const item of json.data) {
+            if (item.date !== today) { continue; }
+            const model = item.model;
+            if (!todayEntries[model]) {
+                todayEntries[model] = { total: 0, inputHit: 0, inputMiss: 0, output: 0, requests: 0 };
+            }
+            todayEntries[model].total += item.totalToken || 0;
+            todayEntries[model].inputHit += item.inputHitToken || 0;
+            todayEntries[model].inputMiss += item.inputMissToken || 0;
+            todayEntries[model].output += item.outputToken || 0;
+            todayEntries[model].requests += item.requestCount || 0;
+        }
+
+        const lines: string[] = [];
+        for (const [model, e] of Object.entries(todayEntries)) {
+            const credits = calcCredits(model, e.inputHit, e.inputMiss, e.output);
+            lines.push(`  ${model}: ${formatCompact(e.total)} token / ${formatCompact(credits)} credits (${e.requests}次)`);
+        }
+
+        if (lines.length === 0) {
+            outputChannel.appendLine(`[Token Viewer] 今日无用量数据 (today=${today}, 返回${json.data.length}条记录)`);
+        }
+
+        return lines.length > 0 ? '\n' + lines.join('\n') : null;
+    } catch (err) {
+        outputChannel.appendLine(`[Token Viewer] 今日用量获取失败: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+    }
+}
+
+/** 根据模型和 token 分类计算 credits 消耗 */
+function calcCredits(model: string, inputHit: number, inputMiss: number, output: number): number {
+    const rates = MODEL_RATES[model as keyof typeof MODEL_RATES];
+    if (!rates) { return 0; }
+    return inputHit * rates.cacheHit + inputMiss * rates.input + output * rates.output;
 }
 
 // ============================================================
@@ -379,7 +549,7 @@ async function triggerCookieRefresh(context: vscode.ExtensionContext): Promise<v
         cookieErrorCount = 0;
 
         await fetchTokenCount(context);
-        vscode.window.showInformationMessage('✅ Cookie 已更新，Token 数据已刷新！');
+        vscode.window.showInformationMessage('✅ Cookie 已更新，Credits 数据已刷新！');
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -400,7 +570,7 @@ function handleFetchError(message: string, detail?: string): void {
         statusBarItem.text = `$(warning) ${compact} ⚠`;
         statusBarItem.tooltip = `Token Viewer - 请求失败\n${message}\n保留上次的值: ${formatted}`;
     } else {
-        statusBarItem.text = '$(error) Token: Error';
+        statusBarItem.text = '$(error) Credits: Error';
         statusBarItem.tooltip = `Token Viewer - 请求失败\n${message}`;
     }
 
@@ -512,6 +682,50 @@ function httpGet(url: string, headers: Record<string, string>): Promise<string> 
             reject(new Error('请求超时（15 秒）'));
         });
 
+        req.end();
+    });
+}
+
+// ============================================================
+// HTTP POST 请求
+// ============================================================
+function httpPost(url: string, headers: Record<string, string>, body: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const isHttps = url.startsWith('https');
+        const httpModule = isHttps ? require('https') : require('http');
+        const urlObj = new URL(url);
+
+        const options = {
+            hostname: urlObj.hostname,
+            port: urlObj.port || (isHttps ? 443 : 80),
+            path: urlObj.pathname + urlObj.search,
+            method: 'POST',
+            headers: { ...headers, 'Content-Length': Buffer.byteLength(body).toString() },
+            timeout: 15000,
+        };
+
+        const req = httpModule.request(options, (res: any) => {
+            let data = '';
+            res.on('data', (chunk: string) => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve(data);
+                } else {
+                    reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}\n响应: ${data.substring(0, 500)}`));
+                }
+            });
+        });
+
+        req.on('error', (error: Error) => {
+            reject(new Error(`网络请求失败: ${error.message}`));
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('请求超时（15 秒）'));
+        });
+
+        req.write(body);
         req.end();
     });
 }

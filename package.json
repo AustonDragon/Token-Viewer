@@ -1,8 +1,8 @@
 {
   "name": "token-viewer",
   "displayName": "Token Viewer",
-  "description": "在 VSCode 状态栏实时显示小米 MiMo 平台的剩余 Token 数量",
-  "version": "1.2.0",
+  "description": "在 VSCode 状态栏实时显示小米 MiMo 平台的剩余 Credits 额度",
+  "version": "1.5.5",
   "publisher": "bynlk",
   "repository": {
     "type": "git",
@@ -45,9 +45,9 @@
         },
         "tokenViewer.alertThreshold": {
           "type": "number",
-          "default": 10000000,
+          "default": 100000000,
           "minimum": 0,
-          "description": "告警阈值，当剩余 Token 小于等于此值时显示警告"
+          "description": "告警阈值，当剩余 Credits 小于等于此值时显示警告"
         }
       }
     }
