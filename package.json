@@ -2,7 +2,7 @@
   "name": "token-viewer",
   "displayName": "Token Viewer",
   "description": "在 VSCode 状态栏实时显示小米 MiMo 平台的剩余 Credits 额度",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "publisher": "bynlk",
   "repository": {
     "type": "git",

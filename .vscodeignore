@@ -11,3 +11,5 @@ node_modules/undici-types/**
 **/*.ts
 **/*.map
 项目记录.md
+deepseek_markdown_*.md
+image.png
